@@ -32,17 +32,26 @@ struct Task{
 	bool completed;
 	int preemptions;
 	int deadlines_missed;
+	vector<string> outputs;
+	int priority;
+	int inherited_priority;
 };
 
 struct Resource {
 	int id;
 	int number_tasks;
 	vector<int> tasks_using;
+	int priority_ceiling;
 };
 
 bool compareByID(const Task &a, const Task &b)
 {
 	return a.id < b.id;
+}
+
+bool compareByPeriod(const Task &a, const Task &b)
+{
+	return a.period > b.period;
 }
 
 int main(int argc, char *argv[]) {
@@ -57,7 +66,7 @@ int main(int argc, char *argv[]) {
 	}
 	string line;
 	string junk;
-	struct Task temp = { 0,0,0,0,0,0,false,0,0 };
+	struct Task temp = { 0,0,0,0,0,0,false,0,0,{},0,0 };
 	vector<Task> tasks;
 	int simulation_time;
 	// Stores the number of tasks
@@ -86,7 +95,7 @@ int main(int argc, char *argv[]) {
 		cout << "Error: Could not open file\n" << endl;
 		return false;
 	}
-	struct Resource res_temp = { -1, 0, {} };
+	struct Resource res_temp = { -1,0,{},0 };
 	vector<Resource> resources;
 	// Stores the number of resources
 	getline(in, line, '\n');
@@ -106,17 +115,43 @@ int main(int argc, char *argv[]) {
 	in.close();
 	in.clear();
 
+	///////////////////////
+	// Assign Priorities //
+	///////////////////////
+	// Sort all tasks with longest period first. Iterate through all tasks and assign
+	// longest period lowest priority (1) to shortest period highest priority.
+	std::sort(tasks.begin(), tasks.end(), compareByPeriod);
+	for (unsigned int i = 1; i <= tasks.size(); i++) {
+		tasks.at(i - 1).priority = i;
+	}
+	std::sort(tasks.begin(), tasks.end(), compareByID);
+	// For each resource, look at each task that uses that resource. Whatever the 
+	// highest priority among those tasks is, the resource gets that priority as its
+	// priority ceiling
+	int highest_priority = 0;
+	for (unsigned int i = 0; i < resources.size(); i++) {
+		for (int j = 0; j < resources.at(i).number_tasks; j++) {
+			for (int k = 0; k < tasks.size(); k++) {
+				if (resources.at(i).tasks_using.at(j) == tasks.at(k).id)
+					if(tasks.at(k).priority > highest_priority)
+						highest_priority = tasks.at(k).priority;
+			}
+		}
+		resources.at(i).priority_ceiling = highest_priority;
+		highest_priority = 0;
+	}
+
 	/////////////////////////
 	// Begin Scheduling RM //
 	/////////////////////////
-	ofstream out;
+	/*ofstream out;
 	out.open("output1.txt");
 	bool task_occuring = false;
 	bool task_reset = false;
 	int total_preemptions = 0;
 	int total_deadlines_missed = 0;
 	int last_task_id = -1;
-	struct Task shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+	struct Task shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 	out << "***RM SCHEDULING***" << endl;
 	for (int current_time = 0; current_time <= simulation_time; current_time++) {
 		// Check if any task not complete will miss deadline
@@ -132,7 +167,7 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 					task_reset = true;
 					task_occuring = false;
-					shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+					shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 				}
 			}
 		}
@@ -193,7 +228,7 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 				}
 			}
-			shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+			shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 		}
 		task_reset = false;
 	}
@@ -215,7 +250,7 @@ int main(int argc, char *argv[]) {
 	total_preemptions = 0;
 	total_deadlines_missed = 0;
 	last_task_id = -1;
-	shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+	shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 	// Reset preemption and deadlines missed count
 	for (unsigned int i = 0; i < tasks.size(); i++) {
 		tasks.at(i).preemptions = 0;
@@ -235,7 +270,7 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 					task_reset = true;
 					task_occuring = false;
-					shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+					shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 				}
 			}
 		}
@@ -305,7 +340,7 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 				}
 			}
-			shortest = { -1,-1,32767,-1,-1,32767,false,0,0 };
+			shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
 		}
 		task_reset = false;
 	}
@@ -318,5 +353,19 @@ int main(int argc, char *argv[]) {
 	for (unsigned int i = 0; i < tasks.size(); i++) {
 		out << "Task" << tasks.at(i).id << " Preemptions: " << tasks.at(i).preemptions << endl;
 	}
-	out.close();
+	out.close();*/
+	ofstream out;
+	for (unsigned int i = 0; i < tasks.size(); i++) {
+		string filename = "output_" + std::to_string(i) + ".txt";
+		out.open(filename);
+		out << "lock_instant,curr_prio,prio_inherit\n";
+		for (unsigned int j = 0; j < tasks.at(i).outputs.size(); i++) {
+			out << tasks.at(i).outputs.at(j);
+		}
+		out.close();
+	}
+	out.open("deadline_misses.txt");
+	for (unsigned int i = 0; i < tasks.size(); i++) {
+		out << std::to_string(tasks.at(i).id) << " " << tasks.at(i).deadlines_missed << "\n";
+	}
 }
