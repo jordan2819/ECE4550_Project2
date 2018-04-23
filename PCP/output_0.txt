@@ -1,0 +1,6 @@
+lock_instant,curr_prio,prio_inherit
+1.00,3,0
+13.00,3,0
+21.00,3,0
+31.00,3,0
+41.00,3,0

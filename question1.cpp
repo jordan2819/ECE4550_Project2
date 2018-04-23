@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <iomanip>
 
 using std::cout;
 using std::endl;
@@ -24,17 +25,23 @@ using std::ofstream;
 
 struct Task{
 	int id;
-	int execution_time;
-	int period;
-	int deadline;
-	int left_to_execute;
-	int time_to_deadline;
+	double execution_time;
+	double period;
+	double deadline;
+	double left_to_execute;
+	double time_to_deadline;
 	bool completed;
-	int preemptions;
 	int deadlines_missed;
 	vector<string> outputs;
 	int priority;
-	int inherited_priority;
+	int current_priority;
+	int priority_inherited_from;
+	bool using_resource;
+	int resource_used;
+	double time_before_critical_section_start;
+	double critical_section_left_to_execute;
+	bool done_critical;
+	bool waiting_for_critical;
 };
 
 struct Resource {
@@ -42,6 +49,7 @@ struct Resource {
 	int number_tasks;
 	vector<int> tasks_using;
 	int priority_ceiling;
+	bool in_use;
 };
 
 bool compareByID(const Task &a, const Task &b)
@@ -66,9 +74,9 @@ int main(int argc, char *argv[]) {
 	}
 	string line;
 	string junk;
-	struct Task temp = { 0,0,0,0,0,0,false,0,0,{},0,0 };
+	struct Task temp = { 0,0,0,0,0,0,false,0,{},0,0,0,false,-1,0,0,false,false };
 	vector<Task> tasks;
-	int simulation_time;
+	double simulation_time;
 	// Stores the number of tasks
 	getline(in, line, '\n');
 	int number_of_tasks = stoi(line);
@@ -79,6 +87,8 @@ int main(int argc, char *argv[]) {
 		iss >> temp.id >> temp.execution_time >> temp.period >> temp.deadline >> junk;
 		temp.left_to_execute = temp.execution_time;
 		temp.time_to_deadline = temp.deadline;
+		temp.time_before_critical_section_start = temp.execution_time/4;
+		temp.critical_section_left_to_execute = temp.execution_time/2;
 		tasks.push_back(temp);
 	}
 	// Stores the simulation time
@@ -95,7 +105,7 @@ int main(int argc, char *argv[]) {
 		cout << "Error: Could not open file\n" << endl;
 		return false;
 	}
-	struct Resource res_temp = { -1,0,{},0 };
+	struct Resource res_temp = { -1,0,{},0,false };
 	vector<Resource> resources;
 	// Stores the number of resources
 	getline(in, line, '\n');
@@ -107,8 +117,13 @@ int main(int argc, char *argv[]) {
 		std::istringstream iss(line);
 		iss >> res_temp.id >> res_temp.number_tasks;
 		int num = -1;
-		while (iss >> num) 
+		while (iss >> num) {
 			res_temp.tasks_using.push_back(num);
+			for (unsigned int i = 0; i < tasks.size(); i++) {
+				if (tasks.at(i).id == num)
+					tasks.at(i).resource_used = res_temp.id;
+			}
+		}
 		resources.push_back(res_temp);
 		res_temp.tasks_using.clear();
 	}
@@ -123,6 +138,8 @@ int main(int argc, char *argv[]) {
 	std::sort(tasks.begin(), tasks.end(), compareByPeriod);
 	for (unsigned int i = 1; i <= tasks.size(); i++) {
 		tasks.at(i - 1).priority = i;
+		tasks.at(i - 1).current_priority = i;
+		tasks.at(i - 1).priority_inherited_from = tasks.at(i - 1).id;
 	}
 	std::sort(tasks.begin(), tasks.end(), compareByID);
 	// For each resource, look at each task that uses that resource. Whatever the 
@@ -131,7 +148,7 @@ int main(int argc, char *argv[]) {
 	int highest_priority = 0;
 	for (unsigned int i = 0; i < resources.size(); i++) {
 		for (int j = 0; j < resources.at(i).number_tasks; j++) {
-			for (int k = 0; k < tasks.size(); k++) {
+			for (unsigned int k = 0; k < tasks.size(); k++) {
 				if (resources.at(i).tasks_using.at(j) == tasks.at(k).id)
 					if(tasks.at(k).priority > highest_priority)
 						highest_priority = tasks.at(k).priority;
@@ -141,50 +158,125 @@ int main(int argc, char *argv[]) {
 		highest_priority = 0;
 	}
 
-	/////////////////////////
-	// Begin Scheduling RM //
-	/////////////////////////
-	/*ofstream out;
+	/////////////////////////////
+	// Begin Scheduling RM+PCP //
+	/////////////////////////////
+	ofstream out;
 	out.open("output1.txt");
 	bool task_occuring = false;
 	bool task_reset = false;
-	int total_preemptions = 0;
+	bool resource_change = false;
 	int total_deadlines_missed = 0;
 	int last_task_id = -1;
-	struct Task shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
-	out << "***RM SCHEDULING***" << endl;
-	for (int current_time = 0; current_time <= simulation_time; current_time++) {
+	struct Task shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false,false };
+	out << "***RM+PCP SCHEDULING***" << endl;
+	for (double current_time = 0; current_time <= simulation_time; current_time+=.25) {
 		// Check if any task not complete will miss deadline
-		if(task_occuring) {
+		if(current_time != 0.0) {
 			for (unsigned int i = 0; i < tasks.size(); i++) {
 				// (D = T) Current time has reached deadline and not done executing
-				if ( current_time % (tasks.at(i).deadline + (current_time / tasks.at(i).period)
-					* tasks.at(i).period) == 0 && tasks.at(i).left_to_execute != 0) {
+				if ((std::fmod(current_time, (tasks.at(i).deadline + ((int)current_time / (int)tasks.at(i).period) * tasks.at(i).period)) == 0 || 
+					 std::fmod(current_time, (tasks.at(i).deadline + (((int)current_time / (int)tasks.at(i).period)-1) * tasks.at(i).period)) == 0)
+					 && tasks.at(i).left_to_execute != 0) {
 					out << "TASK" << tasks.at(i).id << " MISSED DEADLINE" << endl;
 					total_deadlines_missed++;
 					tasks.at(i).left_to_execute = tasks.at(i).execution_time;
+					tasks.at(i).time_before_critical_section_start = tasks.at(i).execution_time / 4;
+					tasks.at(i).critical_section_left_to_execute = tasks.at(i).execution_time / 2;
+					tasks.at(i).done_critical = false;
 					tasks.at(i).deadlines_missed++;
 					tasks.at(i).completed = true;
 					task_reset = true;
 					task_occuring = false;
-					shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
+					tasks.at(i).current_priority = tasks.at(i).priority;
+					tasks.at(i).priority_inherited_from = tasks.at(i).id;
+					tasks.at(i).waiting_for_critical = false;
+					shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false,false };
 				}
 			}
 		}
 		// Check if any task's periods have restarted.
 		for (unsigned int i = 0; i < tasks.size(); i++) {
-			if (current_time % tasks.at(i).period == 0) {
+			if (std::fmod(current_time, tasks.at(i).period) == 0) {
 				tasks.at(i).completed = false;
 				tasks.at(i).left_to_execute = tasks.at(i).execution_time;
+				tasks.at(i).time_before_critical_section_start = tasks.at(i).execution_time / 4;
+				tasks.at(i).critical_section_left_to_execute = tasks.at(i).execution_time / 2;
+				tasks.at(i).done_critical = false;
 				task_reset = true;
+				tasks.at(i).waiting_for_critical = false;
+			}
+		}
+		// Check if any task is done using a resource, reset priority
+		for (unsigned int i = 0; i < tasks.size(); i++) {
+			if (tasks.at(i).critical_section_left_to_execute == 0 && !tasks.at(i).done_critical) {
+				tasks.at(i).using_resource = false;
+				tasks.at(i).done_critical = true;
+				resource_change = true;
+				tasks.at(i).current_priority = tasks.at(i).priority;
+				tasks.at(i).priority_inherited_from = tasks.at(i).id;
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					if (resources.at(j).id == tasks.at(i).resource_used)
+						resources.at(j).in_use = false;
+				}
+				tasks.at(i).waiting_for_critical = false;
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					if (tasks.at(i).resource_used == resources.at(j).id) {
+						for (unsigned int k = 0; k < tasks.size(); k++) {
+							if (tasks.at(k).resource_used == resources.at(j).id) {
+								tasks.at(k).waiting_for_critical = false;
+							}
+						}
+					}
+				}
+			}
+		}
+		// Check if any task is ready to use a resource
+		for (unsigned int i = 0; i < tasks.size(); i++) {
+			if (tasks.at(i).time_before_critical_section_start == 0 && !tasks.at(i).done_critical && !tasks.at(i).using_resource && !tasks.at(i).waiting_for_critical) {
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					for (int k = 0; k < resources.at(j).number_tasks; k++) {
+						if (resources.at(j).tasks_using.at(k) == tasks.at(i).id) {
+							std::stringstream stream;
+							if (!resources.at(j).in_use) {
+								tasks.at(i).waiting_for_critical = false;
+								tasks.at(i).using_resource = true;
+								resources.at(j).in_use = true;
+								resource_change = true;
+								stream << std::fixed << std::setprecision(2) << current_time << "," << tasks.at(i).current_priority <<
+									"," << tasks.at(i).priority_inherited_from << "\n";
+								tasks.at(i).outputs.push_back(stream.str());
+							}
+							else {
+								// Raise the task's priority that is using the resource
+								// Set the task inheritance value
+								tasks.at(i).waiting_for_critical = true;
+								for (unsigned int l = 0; l < tasks.size(); l++) {
+									if (tasks.at(l).resource_used == resources.at(j).id && tasks.at(l).using_resource) {
+										tasks.at(l).current_priority = resources.at(j).priority_ceiling;
+										resource_change = true;
+										for (unsigned int m = 0; m < tasks.size(); m++) {
+											if (tasks.at(m).priority == resources.at(j).priority_ceiling)
+												tasks.at(l).priority_inherited_from = tasks.at(m).id;
+										}
+										stream << std::fixed << std::setprecision(2) << current_time << "," << tasks.at(l).current_priority <<
+											"," << tasks.at(l).priority_inherited_from << "\n";
+										tasks.at(l).outputs.push_back(stream.str());
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 		// If a task was reset, it may have higher priority than what was already running
-		// or nothing was running so see if anything needs run
-		if (task_reset || !task_occuring) {
-			// Check for the shortest period task of those not completed
+		// or nothing was running so see if anything needs run, or a resource is now being
+		// used and/or was released
+		if (task_reset || !task_occuring || resource_change) {
+			// Check for the highest priority task of those not completed
 			for (unsigned int i = 0; i < tasks.size(); i++) {
-				if (tasks.at(i).period < shortest.period && !tasks.at(i).completed && tasks.at(i).deadlines_missed < 1) {
+				if (tasks.at(i).current_priority >= shortest.current_priority && !tasks.at(i).completed && tasks.at(i).deadlines_missed < 1) {
 					shortest = tasks.at(i);
 				}
 			}
@@ -196,17 +288,14 @@ int main(int argc, char *argv[]) {
 		if (task_occuring && shortest.left_to_execute != 0) {
 			// See if current task isn't the same as last task ran and a task was reset
 			// meaning potential preemption occurred.
-			if (last_task_id > 0 && task_reset && !tasks.at(last_task_id-1).completed && last_task_id != shortest.id) {
-				out << current_time << ": Task" << shortest.id << " Preempted Task" << last_task_id << endl;
-				for (unsigned int i = 0; i < tasks.size(); i++) {
-					if (tasks.at(i).id == shortest.id) {
-						tasks.at(i).preemptions++;
-					}
-				}
-				total_preemptions++;
+			if (last_task_id >= 0 && task_reset && !tasks.at(last_task_id).completed && last_task_id != shortest.id) {
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << " Preempted Task" << last_task_id << endl;
+			}
+			else if (shortest.using_resource) {
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << " Using Resource" << shortest.resource_used << endl;
 			}
 			else
-				out << current_time << ": Task" << shortest.id << endl;
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << endl;
 			last_task_id = shortest.id;
 		}
 		// All tasks currently completed and free time
@@ -214,10 +303,16 @@ int main(int argc, char *argv[]) {
 			out << current_time << ":" << endl;
 		}
 		// Decrement the time the current task still needs to run
-		shortest.left_to_execute--;
+		shortest.left_to_execute-=.25;
+		if (!shortest.using_resource && !shortest.done_critical)
+			shortest.time_before_critical_section_start -= .25;
+		else if (shortest.using_resource)
+			shortest.critical_section_left_to_execute -= .25;
 		for (unsigned int i = 0; i < tasks.size(); i++) {
 			if (tasks.at(i).id == shortest.id) {
 				tasks.at(i).left_to_execute = shortest.left_to_execute;
+				tasks.at(i).time_before_critical_section_start = shortest.time_before_critical_section_start;
+				tasks.at(i).critical_section_left_to_execute = shortest.critical_section_left_to_execute;
 			}
 		}
 		// See if task that ran on this runthrough is completed
@@ -228,71 +323,165 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 				}
 			}
-			shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
+			shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false };
 		}
 		task_reset = false;
+		resource_change = false;
 	}
-	// Print out summary
-	out << endl << "RM SUMMARY" << endl << "Total Deadlines Missed: " << total_deadlines_missed << endl;
+	out.close();
+	///////////////////////////
+	// Print out PCP Summary //
+	///////////////////////////
+	ofstream outputs;
 	for (unsigned int i = 0; i < tasks.size(); i++) {
-		out << "Task" << tasks.at(i).id << " Deadlines Missed: " << tasks.at(i).deadlines_missed << endl;
+		string filename = "PCP/output_" + std::to_string(i) + ".txt";
+		outputs.open(filename);
+		outputs << "lock_instant,curr_prio,prio_inherit\n";
+		for (unsigned int j = 0; j < tasks.at(i).outputs.size(); j++) {
+			outputs << tasks.at(i).outputs.at(j);
+		}
+		outputs.close();
 	}
-	out << "Total Preemptions: " << total_preemptions << endl;
+	outputs.open("PCP/deadline_misses.txt");
 	for (unsigned int i = 0; i < tasks.size(); i++) {
-		out << "Task" << tasks.at(i).id << " Preemptions: " << tasks.at(i).preemptions << endl;
+		outputs << std::to_string(tasks.at(i).id) << " " << tasks.at(i).deadlines_missed << "\n";
 	}
+	outputs.close();
 
 	//////////////////////////
 	// Begin Scheduling EDF //
 	//////////////////////////
-	task_occuring = false;
-	task_reset = false;
-	total_preemptions = 0;
-	total_deadlines_missed = 0;
-	last_task_id = -1;
-	shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
+		
+		/* for ICPP
+		// Check if any resources are now locked.
+		for (unsigned int i = 0; i < tasks.size(); i++) {
+			if (tasks.at(i).time_before_critical_section_start == 0) {
+				tasks.at(i).using_resource = true;
+				resource_change = true;
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					for (unsigned int k = 0; k < resources.at(j).number_tasks; k++) {
+						if (resources.at(j).tasks_using.at(k) == tasks.at(i).id)
+							tasks.at(i).current_priority = resources.at(j).priority_ceiling;
+					}
+				}
+			}
+		}
+		*/
+	out.open("output2.txt");
 	// Reset preemption and deadlines missed count
 	for (unsigned int i = 0; i < tasks.size(); i++) {
-		tasks.at(i).preemptions = 0;
 		tasks.at(i).deadlines_missed = 0;
 	}
-	out << endl << endl << "***EDF SCHEDULING***" << endl;
-	for (int current_time = 0; current_time <= simulation_time; current_time++) {
+	task_occuring = false;
+	task_reset = false;
+	resource_change = false;
+	total_deadlines_missed = 0;
+	last_task_id = -1;
+	shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false,false };
+	out << "***RM+ICCP SCHEDULING***" << endl;
+	for (double current_time = 0; current_time <= simulation_time; current_time += .25) {
 		// Check if any task not complete will miss deadline
-		if (task_occuring) {
+		if (current_time != 0.0) {
 			for (unsigned int i = 0; i < tasks.size(); i++) {
-				if (current_time % (tasks.at(i).deadline + (current_time / tasks.at(i).period)
-					* tasks.at(i).period) == 0 && tasks.at(i).left_to_execute != 0) {
+				// (D = T) Current time has reached deadline and not done executing
+				if ((std::fmod(current_time, (tasks.at(i).deadline + ((int)current_time / (int)tasks.at(i).period) * tasks.at(i).period)) == 0 ||
+					std::fmod(current_time, (tasks.at(i).deadline + (((int)current_time / (int)tasks.at(i).period) - 1) * tasks.at(i).period)) == 0)
+					&& tasks.at(i).left_to_execute != 0) {
 					out << "TASK" << tasks.at(i).id << " MISSED DEADLINE" << endl;
 					total_deadlines_missed++;
 					tasks.at(i).left_to_execute = tasks.at(i).execution_time;
+					tasks.at(i).time_before_critical_section_start = tasks.at(i).execution_time / 4;
+					tasks.at(i).critical_section_left_to_execute = tasks.at(i).execution_time / 2;
+					tasks.at(i).done_critical = false;
 					tasks.at(i).deadlines_missed++;
 					tasks.at(i).completed = true;
 					task_reset = true;
 					task_occuring = false;
-					shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
+					tasks.at(i).current_priority = tasks.at(i).priority;
+					tasks.at(i).priority_inherited_from = tasks.at(i).id;
+					tasks.at(i).waiting_for_critical = false;
+					shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false,false };
 				}
 			}
 		}
 		// Check if any task's periods have restarted.
 		for (unsigned int i = 0; i < tasks.size(); i++) {
-			if (current_time % tasks.at(i).period == 0) {
+			if (std::fmod(current_time, tasks.at(i).period) == 0) {
 				tasks.at(i).completed = false;
 				tasks.at(i).left_to_execute = tasks.at(i).execution_time;
-				tasks.at(i).time_to_deadline = tasks.at(i).deadline;
+				tasks.at(i).time_before_critical_section_start = tasks.at(i).execution_time / 4;
+				tasks.at(i).critical_section_left_to_execute = tasks.at(i).execution_time / 2;
+				tasks.at(i).done_critical = false;
 				task_reset = true;
+				tasks.at(i).waiting_for_critical = false;
+			}
+		}
+		// Check if any task is done using a resource, reset priority
+		for (unsigned int i = 0; i < tasks.size(); i++) {
+			if (tasks.at(i).critical_section_left_to_execute == 0 && !tasks.at(i).done_critical) {
+				tasks.at(i).using_resource = false;
+				tasks.at(i).done_critical = true;
+				resource_change = true;
+				tasks.at(i).current_priority = tasks.at(i).priority;
+				tasks.at(i).priority_inherited_from = tasks.at(i).id;
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					if (resources.at(j).id == tasks.at(i).resource_used)
+						resources.at(j).in_use = false;
+				}
+				tasks.at(i).waiting_for_critical = false;
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					if (tasks.at(i).resource_used == resources.at(j).id) {
+						for (unsigned int k = 0; k < tasks.size(); k++) {
+							if (tasks.at(k).resource_used == resources.at(j).id) {
+								tasks.at(k).waiting_for_critical = false;
+							}
+						}
+					}
+				}
+			}
+		}
+		// Check if any task is ready to use a resource
+		for (unsigned int i = 0; i < tasks.size(); i++) {
+			if (tasks.at(i).time_before_critical_section_start == 0 && !tasks.at(i).done_critical && !tasks.at(i).using_resource && !tasks.at(i).waiting_for_critical) {
+				for (unsigned int j = 0; j < resources.size(); j++) {
+					for (int k = 0; k < resources.at(j).number_tasks; k++) {
+						if (resources.at(j).tasks_using.at(k) == tasks.at(i).id) {
+							std::stringstream stream;
+							if (!resources.at(j).in_use) {
+								tasks.at(i).current_priority = resources.at(j).priority_ceiling;
+								for (unsigned int m = 0; m < tasks.size(); m++) {
+									if (tasks.at(m).priority == resources.at(j).priority_ceiling)
+										tasks.at(i).priority_inherited_from = tasks.at(m).id;
+								}
+								tasks.at(i).waiting_for_critical = false;
+								tasks.at(i).using_resource = true;
+								resources.at(j).in_use = true;
+								resource_change = true;
+								stream << std::fixed << std::setprecision(2) << current_time << "," << tasks.at(i).current_priority <<
+									"," << tasks.at(i).priority_inherited_from << "\n";
+								tasks.at(i).outputs.push_back(stream.str());
+							}
+							else {
+								// Raise the task's priority that is using the resource
+								// Set the task inheritance value
+								tasks.at(i).waiting_for_critical = true;
+							}
+						}
+					}
+				}
 			}
 		}
 		// If a task was reset, it may have higher priority than what was already running
-		// or nothing was running so see if anything needs run
-		if (task_reset || !task_occuring) {
-			// Check for the task with the closest deadline of those not completed
+		// or nothing was running so see if anything needs run, or a resource is now being
+		// used and/or was released
+		if (task_reset || !task_occuring || resource_change) {
+			// Check for the highest priority task of those not completed
 			for (unsigned int i = 0; i < tasks.size(); i++) {
-				if (tasks.at(i).time_to_deadline < shortest.time_to_deadline && !tasks.at(i).completed && tasks.at(i).deadlines_missed < 1) {
+				if (tasks.at(i).current_priority >= shortest.current_priority && !tasks.at(i).completed && tasks.at(i).deadlines_missed < 1) {
 					shortest = tasks.at(i);
 				}
 			}
-			// There is a task that hasn't been completed, so start it ***********************************************************************Period?
+			// There is a task that hasn't been completed, so start it
 			if (shortest.period != 32767)
 				task_occuring = true;
 		}
@@ -300,17 +489,14 @@ int main(int argc, char *argv[]) {
 		if (task_occuring && shortest.left_to_execute != 0) {
 			// See if current task isn't the same as last task ran and a task was reset
 			// meaning potential preemption occurred.
-			if (last_task_id > 0 && task_reset && !tasks.at(last_task_id - 1).completed && last_task_id != shortest.id) {
-				out << current_time << ": Task" << shortest.id << " Preempted Task" << last_task_id << endl;
-				for (unsigned int i = 0; i < tasks.size(); i++) {
-					if (tasks.at(i).id == shortest.id) {
-						tasks.at(i).preemptions++;
-					}
-				}
-				total_preemptions++;
+			if (last_task_id >= 0 && task_reset && !tasks.at(last_task_id).completed && last_task_id != shortest.id) {
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << " Preempted Task" << last_task_id << endl;
+			}
+			else if (shortest.using_resource) {
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << " Using Resource" << shortest.resource_used << endl;
 			}
 			else
-				out << current_time << ": Task" << shortest.id << endl;
+				out << std::setprecision(2) << std::fixed << current_time << ": Task" << shortest.id << endl;
 			last_task_id = shortest.id;
 		}
 		// All tasks currently completed and free time
@@ -318,19 +504,17 @@ int main(int argc, char *argv[]) {
 			out << current_time << ":" << endl;
 		}
 		// Decrement the time the current task still needs to run
-		shortest.left_to_execute--;
+		shortest.left_to_execute -= .25;
+		if (!shortest.using_resource && !shortest.done_critical)
+			shortest.time_before_critical_section_start -= .25;
+		else if (shortest.using_resource)
+			shortest.critical_section_left_to_execute -= .25;
 		for (unsigned int i = 0; i < tasks.size(); i++) {
 			if (tasks.at(i).id == shortest.id) {
 				tasks.at(i).left_to_execute = shortest.left_to_execute;
+				tasks.at(i).time_before_critical_section_start = shortest.time_before_critical_section_start;
+				tasks.at(i).critical_section_left_to_execute = shortest.critical_section_left_to_execute;
 			}
-		}
-		// Decrement the time to deadline for all uncompleted tasks
-		for (unsigned int i = 0; i < tasks.size(); i++) {
-			if (!tasks.at(i).completed)
-				if (current_time % tasks.at(i).deadline == 0)
-					tasks.at(i).time_to_deadline = tasks.at(i).deadline;
-				else
-					tasks.at(i).time_to_deadline = (tasks.at(i).deadline + (current_time / tasks.at(i).period) * tasks.at(i).period) - current_time;
 		}
 		// See if task that ran on this runthrough is completed
 		if (task_occuring && shortest.left_to_execute == 0) {
@@ -340,32 +524,27 @@ int main(int argc, char *argv[]) {
 					tasks.at(i).completed = true;
 				}
 			}
-			shortest = { -1,-1,32767,-1,-1,32767,false,0,0,{},0,0 };
+			shortest = { -1,-1,32767,-1,-1,32767,false,0,{},0,0,0,false,-1,0,0,false };
 		}
 		task_reset = false;
+		resource_change = false;
 	}
-	// Print out summary
-	out << endl << "EDF SUMMARY" << endl << "Total Deadlines Missed: " << total_deadlines_missed << endl;
+	out.close();
+	///////////////////////////
+	// Print out ICPP Summary //
+	///////////////////////////
 	for (unsigned int i = 0; i < tasks.size(); i++) {
-		out << "Task" << tasks.at(i).id << " Deadlines Missed: " << tasks.at(i).deadlines_missed << endl;
-	}
-	out << "Total Preemptions: " << total_preemptions << endl;
-	for (unsigned int i = 0; i < tasks.size(); i++) {
-		out << "Task" << tasks.at(i).id << " Preemptions: " << tasks.at(i).preemptions << endl;
-	}
-	out.close();*/
-	ofstream out;
-	for (unsigned int i = 0; i < tasks.size(); i++) {
-		string filename = "output_" + std::to_string(i) + ".txt";
-		out.open(filename);
-		out << "lock_instant,curr_prio,prio_inherit\n";
-		for (unsigned int j = 0; j < tasks.at(i).outputs.size(); i++) {
-			out << tasks.at(i).outputs.at(j);
+		string filename = "ICPP/output_" + std::to_string(i) + ".txt";
+		outputs.open(filename);
+		outputs << "lock_instant,curr_prio,prio_inherit\n";
+		for (unsigned int j = 0; j < tasks.at(i).outputs.size(); j++) {
+			outputs << tasks.at(i).outputs.at(j);
 		}
-		out.close();
+		outputs.close();
 	}
-	out.open("deadline_misses.txt");
+	outputs.open("ICPP/deadline_misses.txt");
 	for (unsigned int i = 0; i < tasks.size(); i++) {
-		out << std::to_string(tasks.at(i).id) << " " << tasks.at(i).deadlines_missed << "\n";
+		outputs << std::to_string(tasks.at(i).id) << " " << tasks.at(i).deadlines_missed << "\n";
 	}
+	outputs.close();
 }

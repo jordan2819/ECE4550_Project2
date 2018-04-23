@@ -1,0 +1,202 @@
+***RM+ICCP SCHEDULING***
+0.00: Task0
+0.25: Task0
+0.50: Task0
+0.75: Task0
+1.00: Task0
+1.25: Task0
+1.50: Task0
+1.75: Task0
+2.00: Task0
+2.25: Task0
+2.50: Task0
+2.75: Task0
+3.00: Task0
+3.25: Task0
+3.50: Task0
+3.75: Task0
+4.00: Task1
+4.25: Task1
+4.50: Task1 Using Resource1
+4.75: Task1 Using Resource1
+5.00: Task1 Using Resource1
+5.25: Task1 Using Resource1
+5.50: Task1
+5.75: Task1
+6.00: Task2 Using Resource0
+6.25: Task2 Using Resource0
+6.50: Task2 Using Resource0
+6.75: Task2 Using Resource0
+7.00: Task2 Using Resource0
+7.25: Task2 Using Resource0
+7.50: Task2 Using Resource0
+7.75: Task2 Using Resource0
+8.00: Task2 Using Resource0
+8.25: Task2 Using Resource0
+8.50: Task2 Using Resource0
+8.75: Task2 Using Resource0
+9.00: Task2 Using Resource0
+9.25: Task2 Using Resource0
+9.50: Task2 Using Resource0
+9.75: Task2 Using Resource0
+10.00: Task0 Preempted Task2
+10.25: Task0
+10.50: Task0
+10.75: Task0
+11.00: Task0 Using Resource0
+11.25: Task0 Using Resource0
+11.50: Task0 Using Resource0
+11.75: Task0 Using Resource0
+12.00: Task0 Using Resource0
+12.25: Task0 Using Resource0
+12.50: Task0 Using Resource0
+12.75: Task0 Using Resource0
+13.00: Task0
+13.25: Task0
+13.50: Task0
+13.75: Task0
+14.00: Task2
+14.25: Task2
+14.50: Task2
+14.75: Task2
+15.00: Task1 Preempted Task2
+15.25: Task1
+15.50: Task1 Using Resource1
+15.75: Task1 Using Resource1
+16.00: Task1 Using Resource1
+16.25: Task1 Using Resource1
+16.50: Task1
+16.75: Task1
+17.00: Task2
+17.25: Task2
+17.50: Task2
+17.75: Task2
+18.00: Task2
+18.25: Task2
+18.50: Task2
+18.75: Task2
+19.00: Task2
+19.25: Task2
+19.50: Task2
+19.75: Task2
+20.00: Task0 Preempted Task2
+20.25: Task0
+20.50: Task0
+20.75: Task0
+21.00: Task0 Using Resource0
+21.25: Task0 Using Resource0
+21.50: Task0 Using Resource0
+21.75: Task0 Using Resource0
+22.00: Task0 Using Resource0
+22.25: Task0 Using Resource0
+22.50: Task0 Using Resource0
+22.75: Task0 Using Resource0
+23.00: Task0
+23.25: Task0
+23.50: Task0
+23.75: Task0
+24.00: Task2
+24.25: Task2
+24.50: Task2
+24.75: Task2
+25.00: Task2
+25.25: Task2
+25.50: Task2
+25.75: Task2
+26.00: Task2 Using Resource0
+26.25: Task2 Using Resource0
+26.50: Task2 Using Resource0
+26.75: Task2 Using Resource0
+27.00: Task2 Using Resource0
+27.25: Task2 Using Resource0
+27.50: Task2 Using Resource0
+27.75: Task2 Using Resource0
+28.00: Task2 Using Resource0
+28.25: Task2 Using Resource0
+28.50: Task2 Using Resource0
+28.75: Task2 Using Resource0
+29.00: Task2 Using Resource0
+29.25: Task2 Using Resource0
+29.50: Task2 Using Resource0
+29.75: Task2 Using Resource0
+30.00: Task0 Preempted Task2
+30.25: Task0
+30.50: Task0
+30.75: Task0
+31.00: Task0 Using Resource0
+31.25: Task0 Using Resource0
+31.50: Task0 Using Resource0
+31.75: Task0 Using Resource0
+32.00: Task0 Using Resource0
+32.25: Task0 Using Resource0
+32.50: Task0 Using Resource0
+32.75: Task0 Using Resource0
+33.00: Task0
+33.25: Task0
+33.50: Task0
+33.75: Task0
+34.00: Task1
+34.25: Task1
+34.50: Task1 Using Resource1
+34.75: Task1 Using Resource1
+35.00: Task1 Using Resource1
+35.25: Task1 Using Resource1
+35.50: Task1
+35.75: Task1
+36.00: Task2
+36.25: Task2
+36.50: Task2
+36.75: Task2
+37.00: Task2
+37.25: Task2
+37.50: Task2
+37.75: Task2
+38.00:
+38.25:
+38.50:
+38.75:
+39.00:
+39.25:
+39.50:
+39.75:
+40.00: Task0 Preempted Task2
+40.25: Task0
+40.50: Task0
+40.75: Task0
+41.00: Task0 Using Resource0
+41.25: Task0 Using Resource0
+41.50: Task0 Using Resource0
+41.75: Task0 Using Resource0
+42.00: Task0 Using Resource0
+42.25: Task0 Using Resource0
+42.50: Task0 Using Resource0
+42.75: Task0 Using Resource0
+43.00: Task0
+43.25: Task0
+43.50: Task0
+43.75: Task0
+44.00: Task2
+44.25: Task2
+44.50: Task2
+44.75: Task2
+45.00: Task1 Preempted Task2
+45.25: Task1
+45.50: Task1 Using Resource1
+45.75: Task1 Using Resource1
+46.00: Task1 Using Resource1
+46.25: Task1 Using Resource1
+46.50: Task1
+46.75: Task1
+47.00: Task2
+47.25: Task2
+47.50: Task2
+47.75: Task2
+48.00: Task2 Using Resource0
+48.25: Task2 Using Resource0
+48.50: Task2 Using Resource0
+48.75: Task2 Using Resource0
+49.00: Task2 Using Resource0
+49.25: Task2 Using Resource0
+49.50: Task2 Using Resource0
+49.75: Task2 Using Resource0
+50.00: Task2 Using Resource0
